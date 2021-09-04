@@ -1,0 +1,95 @@
+Ex. 1
+--We are running an experiment at an item-level, which means all users who visit will see the same page, but the layout of different item pages may differ.
+--Compare this table to the assignment events we captured for user_level_testing.
+--Does this table have everything you need to compute metrics like 30-day view-binary?
+
+SELECT 
+  * 
+FROM 
+  dsv1069.final_assignments_qa
+Ex. 2
+--Reformat the final_assignments_qa to look like the final_assignments table, filling in any missing values with a placeholder of the appropriate data type.
+select
+ item_id,
+ test_a AS test_assignment,
+ case when test_as is not null then 'item_test_1' end as test_number,
+ cast ('2013-01-05 00:00:00' AS timestamp) as test_start_date
+from
+ dsv1069.final_assignments_qa
+union all
+select
+item_id,
+test_b as test_assignment,
+case when test_b IS NOT NULL THEN 'item_test_2' 
+end as test_number
+cast ('2015-03-14 00:00:00' AS timestamp) AS test_start_date
+from
+ dsv1069.final_assignments_qa
+union all
+select
+item_id, 
+test_c AS test_assignment,
+case when test_c is not null then 'item_test_3' 
+end as  test_number,
+cast ('2016-01-07 00:00:00' as timestamp) as test_start_date
+
+from
+ dsv1069.final_assignments_qa
+Ex. 3
+-- Use this table to 
+-- compute order_binary for the 30 day window after the test_start_date
+-- for the test named item_test_2
+
+select 
+    count(distinct item_id)           as items,
+    sum(order_30_day_binary) as orders_30_days,
+    test_assignment
+from(
+select 
+final_assignments.item_id,
+    final_assignments.test_assignment,
+    max (case when (final_assignments.test_start_date<orders.created_at and date_part('day', orders.created_at-final_assignments.test_start_date)<=30) then 1 else 0 end) as     order_30_day_binary
+    from dsv1069.final_assignments
+     left outer join dsv1069.orders on final_assignments.item_id=orders.item_id
+     where final_assignments.test_number='item_test_2' 
+     group by final_assignments.item_id, final_assignments.test_assignment
+      ) orders_30_day
+     group by orders_30_day.test_assignment
+Ex. 4
+-- Use this table to 
+-- compute view_binary for the 30 day window after the test_start_date
+-- for the test named item_test_2
+SELECT 
+       count(distinct items)           as items_counted,
+       sum(view_30_day_binary_sum) as views_sum,
+       avg(view_30_day_binary) as views_avg,
+       test_assignment
+from
+(select final_assignments.item_id as items,
+     final_assignments.test_assignment,
+     count (case when (final_assignments.test_start_date<view_item_events.event_time 
+         and date_part('day', view_item_events.event_time-final_assignments.test_start_date)<=30)           
+         then 1 else 0 end) as view_30_day_binary,
+     max (case when (final_assignments.test_start_date<view_item_events.event_time 
+         and date_part('day', view_item_events.event_time-final_assignments.test_start_date)<=30) 
+       then 1 else 0 end)as view_30_day_binary_sum
+from dsv1069.final_assignments
+     left outer join dsv1069.view_item_events on final_assignments.item_id=view_item_events.item_id
+     where final_assignments.test_number='item_test_2' 
+     group by final_assignments.item_id, final_assignments.test_assignment
+      ) views_30_day
+     group by test_assignment
+Ex. 5
+--Use the https://thumbtack.github.io/abba/demo/abba.html to compute the lifts in metrics and the p-values for the binary metrics ( 30 day order binary and 30 day view binary) using a interval 95% confidence. 
+--a) views
+	   --    Successes	  Total	  Success Rate	  p-value	Improvement
+--control	       925     1130   80% - 84%       -          -
+                               -- (82%)
+--treatment      894     1068   81% - 86%     0.25    -1.6%-6.1%
+                                -- (84%)                   (2.3%)
+--b) views
+	       --Successes	  Total	  Success Rate	  p-value	Improvement
+--control	       341    1130     28% - 33%       -          -
+                                     --(30%)
+---treatment      319    1068     27% - 33%%     0.88    -14%-12%
+                                     --(30%)                (-1%)
